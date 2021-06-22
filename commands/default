@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+[ "$DEBUG" == 'true' ] && set -x
+
+cat << EOF
+
+  Please choose a command:
+
+     load - load database
+
+     save - save databases
+
+EOF
