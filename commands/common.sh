@@ -3,13 +3,10 @@
 HOST=${DATABASE_HOST-${MONGODB_PORT_27017_TCP_ADDR-localhost}}
 PORT=${DATABASE_PORT-${MONGODB_PORT_27017_TCP_PORT-27017}}
 USER=${DATABASE_USER-""}
-PASS=${DATABASE_PASS-${MONGODB_ENV_MYSQL_ROOT_PASSWORD}}
-# This could be made db specific by using --defaults-file=
-# MYCONN="--user=${USER} --password=${PASS} --host=${HOST} --port=${PORT}"
-# MYSQL="mysql ${MYCONN}"
-# MYSQLDUMP="mysqldump $MYCONN"
-# MYCHECK="mysqlcheck ${MYCONN}"
-GZIP="gzip --fast"
+PASS=${DATABASE_PASS-${MONGODB_ENV_MONGODB_ADMIN_PASSWORD}}
+MONGOCONN="--username=${USER} --password=${PASS} --host=${HOST} --port=${PORT}"
+MONGORESTORE="mongorestore --gzip $MONGOCONN"
+MONGODUMP="mongodump --gzip $MONGOCONN"
 
 wait_mongodb() {
     # Wait for MongoDB to be available

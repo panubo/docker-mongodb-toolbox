@@ -1,1 +1,24 @@
 #!/usr/bin/env bash
+
+set -e -o pipefail
+[ "$DEBUG" == 'true' ] && set -x
+. "$(dirname $0)/"common.sh
+
+if [ -z "$DATA_DIR" ]; then
+    echo "DATA_DIR not set"
+    exit 128
+fi
+
+DATA_DIR=${DATA_DIR-'/data'}
+
+wait_mongodb
+
+echo ">> Loading Database Dumps from from ${DATA_DIR}."
+
+for DUMP in $(find ${DATA_DIR} -maxdepth 1 -mindepth 1 -type d); do
+    DB=$(basename $DUMP)
+    echo ">>> Loading $DUMP as $DB ... "
+    $MONGORESTORE -d "${DB}" "${DUMP}"
+done
+
+echo ">> Done."

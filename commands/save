@@ -1,1 +1,23 @@
 #!/usr/bin/env bash
+
+set -e -o pipefail
+[ "$DEBUG" == 'true' ] && set -x
+. "$(dirname $0)/"common.sh
+
+if [ -z "$DATA_DIR" ]; then
+    echo "DATA_DIR not set"
+    exit 128
+fi
+
+DATA_DIR=${DATA_DIR-'/data'}
+
+wait_mongodb
+
+BACKUP_PATH="${DATA_DIR}"
+
+# Perform the backup
+mkdir -p "$BACKUP_PATH"
+
+$MONGODUMP -o "${BACKUP_PATH}"
+
+echo ">> Done."
