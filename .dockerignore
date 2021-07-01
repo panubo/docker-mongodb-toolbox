@@ -2,3 +2,4 @@
 .github
 .dockerignore
 README.md
+tests
