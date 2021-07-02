@@ -1,7 +1,7 @@
 FROM alpine:3.14
 
 RUN set -x \
-  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 rsync curl \
+  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 py3-pip rsync curl \
   && ln -s /usr/bin/python3 /usr/bin/python \
   && rm -rf /var/cache/apk/* \
   ;
@@ -42,6 +42,10 @@ RUN set -x \
   && apk del wget \
   && rm -rf /tmp/* \
   ;
+
+RUN pip install pymongo;
+
+COPY mongo-list-databases.py /usr/local/bin/
 
 COPY commands /commands
 

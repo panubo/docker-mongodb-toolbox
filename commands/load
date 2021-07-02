@@ -1,24 +1,217 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034 shell=bash
 
-set -e -o pipefail
-[ "$DEBUG" == 'true' ] && set -x
-. "$(dirname $0)/"common.sh
+set -eo pipefail
+IFS=$'\n\t'
 
-if [ -z "$DATA_DIR" ]; then
-    echo "DATA_DIR not set"
-    exit 128
+[[ "${DEBUG:-}" == 'true' ]] && set -x
+
+# shellcheck disable=SC1090
+. "$(dirname "${0}")/common.sh"
+
+# This should be at the top but common.sh throws an error when used
+set -u
+
+# Options:
+# compression gzip|lz4|bz2|zip|none
+# dateformat %Y%m%d%H%M%S
+# checksum sha256
+# umask 0077
+# dest gs://|s3://|file://
+# databases ALL
+
+parse_options() {
+
+    # For reference these are the relevant parameters that mongodump command accepts
+    #   -h, --host=name         mongodb host to connect to (setname/host1,host2 for replica sets)
+    #   -p, --password[=name]   password for authentication
+    #   --port=#                server port (can also use --host hostname:port)
+    #   -u, --username=name     username for authentication
+    #   -d, --db=name           database to use
+
+    # Pull in environment variables prefixed with DATABASE_
+    for item in host port user database password; do
+        local varname
+        varname="DATABASE_${item^^}"
+        if [[ -n "${!varname:-}" ]]; then
+          eval ${item}="${!varname}"
+        fi
+    done
+
+    # Options and long options
+    local options="h:P:u:D:p:"
+    local longopts="host:,port:,user:,database:,password:,umask:"
+    local parsed
+
+    # Parse with getopt (not getopts)
+    ! parsed=$(getopt --quiet --options=${options} --longoptions=${longopts} --name "${0}" -- "${@}")
+    eval set -- "${parsed}"
+    while true; do
+      case "${1}" in
+        -h|--host)
+          host="${2}"
+          shift 2
+          ;;
+        -P|--port)
+          port="${2}"
+          shift 2
+          ;;
+        -u|--user)
+          user="${2}"
+          shift 2
+          ;;
+        -D|--database)
+          database="${2}"
+          shift 2
+          ;;
+        -p|--password)
+          password="${2}"
+          shift 2
+          ;;
+        --umask)
+          umask="${2}"
+          shift 2
+          ;;
+        --)
+          shift
+          break
+          ;;
+        *)
+          echo "Unrecognised option"
+          exit 3
+          ;;
+      esac
+    done
+
+    # Set remaining command line arguments into an array
+    args=( "${@}" )
+
+    # Setup connection string
+    connection=()
+    for item in host port username password db ; do
+        if [[ -n "${!item:-}" ]]; then
+          connection+=("--${item//_/-}=${!item}")
+        fi
+    done
+
+    connection_no_db=()
+    for item in host port username password ; do
+        if [[ -n "${!item:-}" ]]; then
+          connection_no_db+=("--${item//_/-}=${!item}")
+        fi
+    done
+}
+
+parse_options "${@}"
+
+usage() {
+    echoerr "Usage: ${0} [GLOBAL_OPTIONS] [OPTIONS] [DATABASE...] DESTINATION"
+    echoerr "Global Options: (where possible these options match mongodump options)"
+    echoerr "    -h|--host    host to connect to"
+    echoerr "    -P|--port    post to connect to"
+    echoerr "    -u|--user    user to connect with"
+    echoerr "    -D|--database    database to connect to"
+    echoerr "    -p|--password    password to connection to (not recommended. Use password-file)"
+    echoerr ""
+    echoerr "Options:"
+    echoerr "    --date-format    %Y%m%d%H%M%S"
+    echoerr "    --umask    0077"
+    echoerr ""
+    echoerr "    DATABASE    database(s) to dump. Will dump all if no databases are specified."
+    echoerr "    DESTINATION    Destination to save database dumps to. s3://, gs:// and files are supported."
+    echoerr ""
+    echoerr "Environment variables:"
+    echoerr "    Any global options can be prefixed with DATABASE_ and specified via environment variable."
+    echoerr "    Any save command options can be prefixed with SAVE_ and specified via environment variable."
+}
+
+case "${#args[@]}" in
+  0|1)
+    echo "error: Insufficient args: ${#args[@]} args passed"
+    exit 1
+    ;;
+  2)
+    source="${args[0]}"
+    src_database="${args[1]}"
+    dest_database="${args[1]}"
+    ;;
+  3)
+    source="${args[0]}"
+    src_database="${args[1]}"
+    dest_database="${args[2]}"
+    ;;
+  *)
+    echo "Unknown"
+    exit 1
+    ;;
+  esac
+
+echo "Source:  ${source}"
+echo "SRC DB:  ${src_database}"
+echo "DEST DB: ${dest_database}"
+
+
+#
+# # Pick up the destination parameter, should always be the last parameter based on standard SRC DEST parameter order
+# # TODO: this seems to blow up if args is empty
+# if [[ -z "${args[-1]:-}" ]]; then
+#     echoerr "Destination is not specified."
+#     usage
+#     exit 1
+# fi
+# dest="${args[-1]}"
+# unset "args[-1]"
+
+# Set the umask, umask defaults to 0077 to keep files private during db dumping
+umask "${umask:-0077}"
+
+date="$(date --utc "+${date_format:-%Y%m%d%H%M%S}")"
+
+get_storage_commands "${source}"
+
+# Find latest
+latest="$(eval "${ls_cmd[@]}" "${source}" | sed -E -e '/[0-9]{14}/!d' -e 's/.*([0-9]{14})\/$/\1/' | sort | tail -n1)"
+echo "Latest: ${latest}"
+
+eval "${ls_cmd[@]}" "${source}/${latest}/"
+
+## up to here!!
+file="$(eval "${ls_cmd[@]}" "${source}/${latest}/" | sed -E -e 's/.*[\/ ]([^\/]*)$/\1/' | grep "^${src_database}[\.\-]" || true)"
+if [[ -z "${file}" ]]; then
+  echo "No save found for database in ${latest}"
+  exit 1
+fi
+echo "File: ${file}"
+
+if [[ "${compression:-auto}" == "auto" ]]; then
+  case "${file##*.}" in
+    "lz4")
+      compression="lz4"
+      ;;
+    "gz")
+      compression="gzip"
+      ;;
+    "bz2")
+      compression="bz2"
+      ;;
+    "zip")
+      compression="zip"
+      ;;
+    "sql"|"dump"|"pgdump"|"pg_dump")
+      compression="none"
+      ;;
+    *)
+      echo "Unknown file expression, please define compression used or compression=none"
+      exit 1
+      ;;
+    esac
 fi
 
-DATA_DIR=${DATA_DIR-'/data'}
+# Output compression
+get_compression_commands "${compression}"
 
-wait_mongodb
+wait_mongodb "${host}" "${port:-27017}"
 
-echo ">> Loading Database Dumps from from ${DATA_DIR}."
+eval "${fetch_cmd[@]}" "${source}/${latest}/${file}" "-" | "${decompression_cmd[@]}" | mongorestore "${connection_no_db[@]}" -d "${dest_database}" -c "${dest_database}" -
 
-for DUMP in $(find ${DATA_DIR} -maxdepth 1 -mindepth 1 -type d); do
-    DB=$(basename $DUMP)
-    echo ">>> Loading $DUMP as $DB ... "
-    $MONGORESTORE -d "${DB}" "${DUMP}"
-done
-
-echo ">> Done."
+echo ">> Finished."

@@ -1,23 +1,220 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034 shell=bash
 
-set -e -o pipefail
-[ "$DEBUG" == 'true' ] && set -x
-. "$(dirname $0)/"common.sh
+set -eo pipefail
+IFS=$'\n\t'
 
-if [ -z "$DATA_DIR" ]; then
-    echo "DATA_DIR not set"
-    exit 128
+[[ "${DEBUG:-}" == 'true' ]] && set -x
+
+# shellcheck disable=SC1090
+. "$(dirname "${0}")/common.sh"
+
+# This should be at the top but common.sh throws an error when used
+set -u
+
+# Options:
+# compression gzip|lz4|bz2|zip|none
+# dateformat %Y%m%d%H%M%S
+# checksum sha256
+# umask 0077
+# dest gs://|s3://|file://
+# databases ALL
+
+parse_options() {
+
+    # For reference these are the relevant parameters that mongodump command accepts
+    #   -h, --host=name         mongodb host to connect to (setname/host1,host2 for replica sets)
+    #   -p, --password[=name]   password for authentication
+    #   --port=#                server port (can also use --host hostname:port)
+    #   -u, --username=name     username for authentication
+    #   -d, --db=name           database to use
+
+    # Pull in environment variables prefixed with DATABASE_
+    for item in host port user database password; do
+        local varname
+        varname="DATABASE_${item^^}"
+        if [[ -n "${!varname:-}" ]]; then
+          eval ${item}="${!varname}"
+        fi
+    done
+
+    # Options and long options
+    local options="h:P:u:D:p:"
+    local longopts="host:,port:,user:,database:,password:,umask:"
+    local parsed
+
+    # Parse with getopt (not getopts)
+    ! parsed=$(getopt --quiet --options=${options} --longoptions=${longopts} --name "${0}" -- "${@}")
+    eval set -- "${parsed}"
+    while true; do
+      case "${1}" in
+        -h|--host)
+          host="${2}"
+          shift 2
+          ;;
+        -P|--port)
+          port="${2}"
+          shift 2
+          ;;
+        -u|--user)
+          user="${2}"
+          shift 2
+          ;;
+        -D|--database)
+          database="${2}"
+          shift 2
+          ;;
+        -p|--password)
+          password="${2}"
+          shift 2
+          ;;
+        --umask)
+          umask="${2}"
+          shift 2
+          ;;
+        --)
+          shift
+          break
+          ;;
+        *)
+          echo "Unrecognised option"
+          exit 3
+          ;;
+      esac
+    done
+
+    # Set remaining command line arguments into an array
+    args=( "${@}" )
+
+    # Setup connection string
+    connection=()
+    for item in host port username password db ; do
+        if [[ -n "${!item:-}" ]]; then
+          connection+=("--${item//_/-}=${!item}")
+        fi
+    done
+}
+
+parse_options "${@}"
+
+usage() {
+    echoerr "Usage: ${0} [GLOBAL_OPTIONS] [OPTIONS] [DATABASE...] DESTINATION"
+    echoerr "Global Options: (where possible these options match mongodump options)"
+    echoerr "    -h|--host    host to connect to"
+    echoerr "    -P|--port    post to connect to"
+    echoerr "    -u|--user    user to connect with"
+    echoerr "    -D|--database    database to connect to"
+    echoerr "    -p|--password    password to connection to (not recommended. Use password-file)"
+    echoerr ""
+    echoerr "Options:"
+    echoerr "    --date-format    %Y%m%d%H%M%S"
+    echoerr "    --umask    0077"
+    echoerr ""
+    echoerr "    DATABASE    database(s) to dump. Will dump all if no databases are specified."
+    echoerr "    DESTINATION    Destination to save database dumps to. s3://, gs:// and files are supported."
+    echoerr ""
+    echoerr "Environment variables:"
+    echoerr "    Any global options can be prefixed with DATABASE_ and specified via environment variable."
+    echoerr "    Any save command options can be prefixed with SAVE_ and specified via environment variable."
+}
+
+# Pick up the destination parameter, should always be the last parameter based on standard SRC DEST parameter order
+# TODO: this seems to blow up if args is empty
+if [[ -z "${args[-1]:-}" ]]; then
+    echoerr "Destination is not specified."
+    usage
+    exit 1
+fi
+dest="${args[-1]}"
+unset "args[-1]"
+
+# Set the umask, umask defaults to 0077 to keep files private during db dumping
+umask "${umask:-0077}"
+
+date="$(date --utc "+${date_format:-%Y%m%d%H%M%S}")"
+
+get_storage_commands "${dest}"
+
+cmd_args=()
+file_ext=()
+file_path=( "${dest}" "${date}" )
+
+# additional command args
+cmd_args+=( )
+
+# TODO: extra options for each of the object storage tools, eg server side encryption settings etc
+# TODO: implement checksum option (currently locked to sha256)
+
+# Output format and extension
+file_ext+=( ".bson" )
+
+# Output compression
+# TODO implement alternative compression
+get_compression_commands "${compression:-gzip}"
+
+# Create a temporary save path
+# mkdir uses TMPDIR, if unset set to /var/tmp since /tmp is normally in memory and could be too small for a big database
+TMPDIR="${TMPDIR:-/var/tmp}"
+save_path="$(mktemp -d)/"
+
+# Setup the final path to pass to the save cmd
+full_path="$(printf "%s/" "${file_path[@]}")"
+
+# If file destination create the directories and reset the temporary save path to the final save path
+if [[ "${storage_type}" == "file" ]]; then
+    mkdir -p "${full_path}"
+    # Reset the save path if file destination
+    save_path="${full_path}/"
 fi
 
-DATA_DIR=${DATA_DIR-'/data'}
+# TODO: remove any double / from the full_path EXCEPT the double slash in the protocol
+# full_path="${full_path//\/\//\/}"
 
-wait_mongodb
+# Put the file extensions together, dump type and compression type
+final_ext="$(printf "%s" "${file_ext[@]}")"
 
-BACKUP_PATH="${DATA_DIR}"
+wait_mongodb "${host}" "${port:-27017}"
 
-# Perform the backup
-mkdir -p "$BACKUP_PATH"
+# Saving a list of all databases as an array
+echo "${skip_databases[@]}"
+skip_dbs="$(printf "|%s" "${skip_databases[@]}")"
+mapfile -t all_databases < <( mongo-list-databases.py "${connection[@]}" | grep -v -E "^(${skip_dbs})$" )
 
-$MONGODUMP -o "${BACKUP_PATH}"
+echo "All databases:"
+echo "${all_databases[*]}"
 
-echo ">> Done."
+if [[ "${#args[@]}" -gt 0 ]]; then
+    databases=( "${args[@]}" )
+else
+    databases=( "${all_databases[@]}" )
+fi
+# TODO: check databases specified on command line exist in database
+
+echo "Databases to dump: ${#databases[@]}"
+echo "${databases[*]}"
+
+if [[ "${#databases[@]}" -lt 1 ]]; then
+  echo ">> ERROR: no databases to dump but we expected some"
+  exit 1
+fi
+
+# loop over and save the databases
+for database in "${databases[@]}"; do
+  save_dest="${save_path}${database}${final_ext}"
+  echo ">> Saving ${database} to ${save_dest}"
+  mongodump "${connection[@]}" "${cmd_args[@]}" | "${compression_cmd[@]}" | tee >(sha256sum > /tmp/sha.txt) > "${save_dest}"
+  awk "{print \$1 \"  ${database}${final_ext}\"}" < /tmp/sha.txt | tee -a "${save_path}/CHECKSUM"
+done
+
+# Do the upload
+# TODO: can we keep the local copy too?
+if [[ "${storage_type}" == "file" ]]; then
+    ls -l "${full_path}"
+else
+    echo ">> Uploading to ${full_path}"
+    eval "${save_cmd[@]}" "${save_path}" "${full_path}"
+    # Clean up the save path if successful and not a file storage_type
+    rm -rf "${save_path}"
+fi
+
+echo ">> Finished."

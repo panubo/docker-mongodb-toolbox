@@ -22,3 +22,6 @@ push: ## Pushes the docker image to hub.docker.com
 	docker tag $(IMAGE_NAME):$(TAG) $(IMAGE_NAME):latest
 	docker push $(IMAGE_NAME):$(TAG)
 	docker push $(IMAGE_NAME):latest
+
+shell: build ## Run shell
+	docker run --rm -ti --entrypoint sh $(IMAGE_NAME):$(TAG)
