@@ -11,9 +11,13 @@ parser.add_argument('--username')
 parser.add_argument('--password')
 parser.add_argument('--host', required=True)
 parser.add_argument('--port', default=27017, type=int)
+parser.add_argument('--authenticationDatabase', default='admin')
+parser.add_argument('--ssl', dest='ssl', action='store_true')
+parser.set_defaults(tls=False)
+
 args = parser.parse_args()
 
-client = MongoClient(host=args.host, port=args.port, username=args.username, password=args.password)
+client = MongoClient(host=args.host, port=args.port, username=args.username, password=args.password, authSource=args.authenticationDatabase, tls=args.ssl)
 
-for db in client.list_databases():
-    print(db['name'])
+for db in client.list_database_names():
+    print(db)

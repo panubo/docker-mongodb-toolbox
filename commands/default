@@ -12,4 +12,6 @@ cat << EOF
 
      save - save databases
 
+     list-databases - list all databases
+
 EOF

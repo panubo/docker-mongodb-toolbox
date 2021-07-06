@@ -28,9 +28,10 @@ parse_options() {
     #   --port=#                server port (can also use --host hostname:port)
     #   -u, --username=name     username for authentication
     #   -d, --db=name           database to use
+    #   --ssl                   connect to a mongod or mongos that has ssl enabled
 
     # Pull in environment variables prefixed with DATABASE_
-    for item in host port user database password; do
+    for item in host port username database password; do
         local varname
         varname="DATABASE_${item^^}"
         if [[ -n "${!varname:-}" ]]; then
@@ -39,8 +40,8 @@ parse_options() {
     done
 
     # Options and long options
-    local options="h:P:u:D:p:"
-    local longopts="host:,port:,user:,database:,password:,umask:"
+    local options="h:P:u:p:"
+    local longopts="host:,port:,username:,password:,authenticationDatabase:,ssl,umask:"
     local parsed
 
     # Parse with getopt (not getopts)
@@ -56,17 +57,21 @@ parse_options() {
           port="${2}"
           shift 2
           ;;
-        -u|--user)
-          user="${2}"
-          shift 2
-          ;;
-        -D|--database)
-          database="${2}"
+        -u|--username)
+          username="${2}"
           shift 2
           ;;
         -p|--password)
           password="${2}"
           shift 2
+          ;;
+        --authenticationDatabase)
+          authenticationDatabase="${2}"
+          shift 2
+          ;;
+        --ssl)
+          ssl="true"
+          shift 1
           ;;
         --umask)
           umask="${2}"
@@ -88,16 +93,15 @@ parse_options() {
 
     # Setup connection string
     connection=()
-    for item in host port username password db ; do
+    for item in host port username password authenticationDatabase ; do
         if [[ -n "${!item:-}" ]]; then
           connection+=("--${item//_/-}=${!item}")
         fi
     done
 
-    connection_no_db=()
-    for item in host port username password ; do
-        if [[ -n "${!item:-}" ]]; then
-          connection_no_db+=("--${item//_/-}=${!item}")
+    for item in ssl ; do
+        if [[ "${!item:-}" == "true" ]]; then
+          connection+=("--${item//_/-}")
         fi
     done
 }
@@ -109,12 +113,12 @@ usage() {
     echoerr "Global Options: (where possible these options match mongodump options)"
     echoerr "    -h|--host    host to connect to"
     echoerr "    -P|--port    post to connect to"
-    echoerr "    -u|--user    user to connect with"
-    echoerr "    -D|--database    database to connect to"
-    echoerr "    -p|--password    password to connection to (not recommended. Use password-file)"
+    echoerr "    -u|--username    user to connect with"
+    echoerr "    -p|--password    password to connection with"
+    echoerr "    --authenticationDatabase  authentication database to use eg admin"
+    echoerr "    --ssl            connect using ssl"
     echoerr ""
     echoerr "Options:"
-    echoerr "    --date-format    %Y%m%d%H%M%S"
     echoerr "    --umask    0077"
     echoerr ""
     echoerr "    DATABASE    database(s) to dump. Will dump all if no databases are specified."
@@ -141,7 +145,7 @@ case "${#args[@]}" in
     dest_database="${args[2]}"
     ;;
   *)
-    echo "Unknown"
+    echo "Unrecognised args ${args[@]}"
     exit 1
     ;;
   esac
@@ -149,18 +153,6 @@ case "${#args[@]}" in
 echo "Source:  ${source}"
 echo "SRC DB:  ${src_database}"
 echo "DEST DB: ${dest_database}"
-
-
-#
-# # Pick up the destination parameter, should always be the last parameter based on standard SRC DEST parameter order
-# # TODO: this seems to blow up if args is empty
-# if [[ -z "${args[-1]:-}" ]]; then
-#     echoerr "Destination is not specified."
-#     usage
-#     exit 1
-# fi
-# dest="${args[-1]}"
-# unset "args[-1]"
 
 # Set the umask, umask defaults to 0077 to keep files private during db dumping
 umask "${umask:-0077}"
@@ -212,6 +204,6 @@ get_compression_commands "${compression}"
 
 wait_mongodb "${host}" "${port:-27017}"
 
-eval "${fetch_cmd[@]}" "${source}/${latest}/${file}" "-" | "${decompression_cmd[@]}" | mongorestore "${connection_no_db[@]}" -d "${dest_database}" -c "${dest_database}" -
+eval "${fetch_cmd[@]}" "${source}/${latest}/${file}" "-" | "${decompression_cmd[@]}" | mongorestore "${connection[@]}" "--archive=-" --nsFrom="${src_database}.*" --nsTo="${dest_database}.*"
 
 echo ">> Finished."

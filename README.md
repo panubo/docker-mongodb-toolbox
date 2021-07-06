@@ -36,7 +36,7 @@ Or alternatively specify the variables:
 - `DATABASE_USER` = Administrative user
 - `DATABASE_PASS` = Password of administrative user.
 
-Some subcommands require additional environment parameters. See the
+Some subcommands require additional environment parameters or positional arguments. See the
 documentation for the subcommand for more information.
 
 ## Status

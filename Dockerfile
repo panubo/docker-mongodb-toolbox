@@ -43,9 +43,9 @@ RUN set -x \
   && rm -rf /tmp/* \
   ;
 
+# for list-databases
+ENV PATH=${PATH}:/commands
 RUN pip install pymongo;
-
-COPY mongo-list-databases.py /usr/local/bin/
 
 COPY commands /commands
 
