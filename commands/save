@@ -61,7 +61,7 @@ parse_options() {
 
     # Options and long options
     local options="h:P:u:D:p:"
-    local longopts="host:,port:,username:,database:,password:,password-file:,authenticationDatabase:,ssl,umask:"
+    local longopts="host:,port:,username:,database:,password:,password-file:,authenticationDatabase:,compression:,ssl,umask:"
     local parsed
 
     # Parse with getopt (not getopts)
@@ -95,6 +95,10 @@ parse_options() {
           ;;
         --authenticationDatabase)
           authenticationDatabase="${2}"
+          shift 2
+          ;;
+        --compression)
+          compression="${2}"
           shift 2
           ;;
         --ssl)
@@ -154,6 +158,7 @@ usage() {
     echoerr "    --ssl            connect using ssl"
     echoerr ""
     echoerr "Options:"
+    echoerr "    --compression    gzip|lz4|bz2|none"
     echoerr "    --umask    0077"
     echoerr ""
     echoerr "    DATABASE    database(s) to dump. Will dump all if no databases are specified."
