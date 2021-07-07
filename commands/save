@@ -20,6 +20,8 @@ set -u
 # dest gs://|s3://|file://
 # databases ALL
 
+echo "> Starting $(basename $0)"
+
 parse_options() {
 
     # For reference these are the relevant parameters that mongodump command accepts
@@ -30,8 +32,11 @@ parse_options() {
     #   -d, --db=name           database to use
     #   --ssl                   connect to a mongod or mongos that has ssl enabled
 
+    # We don't want to pass these back to the caller
+    local password_file
+
     # Pull in environment variables prefixed with DATABASE_
-    for item in host port username database password; do
+    for item in host port username database password password_file; do
         local varname
         varname="DATABASE_${item^^}"
         if [[ -n "${!varname:-}" ]]; then
@@ -56,7 +61,7 @@ parse_options() {
 
     # Options and long options
     local options="h:P:u:D:p:"
-    local longopts="host:,port:,username:,database:,password:,authenticationDatabase:,ssl,umask:"
+    local longopts="host:,port:,username:,database:,password:,password-file:,authenticationDatabase:,ssl,umask:"
     local parsed
 
     # Parse with getopt (not getopts)
@@ -82,6 +87,10 @@ parse_options() {
           ;;
         -p|--password)
           password="${2}"
+          shift 2
+          ;;
+        --password-file)
+          password_file="${2}"
           shift 2
           ;;
         --authenticationDatabase)
@@ -110,9 +119,15 @@ parse_options() {
     # Set remaining command line arguments into an array
     args=( "${@}" )
 
+    # Read in the password file if set
+    if [[ -n "${password_file:-}" ]]; then
+        # Read password file if set on the command line or DATABASE_PASSWORD_FILE
+        password="$(cat "${password_file}")"
+    fi
+
     # Setup connection string
     connection=()
-    for item in host port username password authenticationDatabase db ; do
+    for item in host port username authenticationDatabase db ; do
         if [[ -n "${!item:-}" ]]; then
           connection+=("--${item//_/-}=${!item}")
         fi
@@ -202,7 +217,7 @@ wait_mongodb "${host}" "${port:-27017}"
 # Saving a list of all databases as an array
 echo "Databases to skip: ${skip_databases[@]}"
 skip_dbs="$(printf "|%s" "${skip_databases[@]}")"
-mapfile -t all_databases < <( list-databases "${connection[@]}" | grep -v -E "^(${skip_dbs})$" )
+mapfile -t all_databases < <( list-databases "${connection[@]}" "--password=${password:-}" | grep -v -E "^(${skip_dbs})$" )
 
 # if db set on command line, otherwise dump all databases (except skipped)
 if [[ "${#args[@]}" -gt 0 ]]; then
@@ -223,7 +238,7 @@ for database in "${databases[@]}"; do
   save_dest="${save_path}${database}${final_ext}"
   echo ">> Saving ${database} to ${save_dest}"
   echo mongodump "${connection[@]}" "${cmd_args[@]}" "--archive=-" "--db=${database}"
-  mongodump "${connection[@]}" "${cmd_args[@]}" "--archive=-"  "--db=${database}" | "${compression_cmd[@]}" | tee >(sha256sum > /tmp/sha.txt) > "${save_dest}";
+  echo "${password:-}" | mongodump "${connection[@]}" "${cmd_args[@]}" "--archive=-"  "--db=${database}" | "${compression_cmd[@]}" | tee >(sha256sum > /tmp/sha.txt) > "${save_dest}";
   awk "{print \$1 \"  ${database}${final_ext}\"}" < /tmp/sha.txt | tee -a "${save_path}/CHECKSUM"
 done
 
@@ -237,4 +252,4 @@ else
     rm -rf "${save_path}"
 fi
 
-echo ">> Finished."
+echo "> Finished."
