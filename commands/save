@@ -222,7 +222,7 @@ wait_mongodb "${host}" "${port:-27017}"
 # Saving a list of all databases as an array
 echo "Databases to skip: ${skip_databases[@]}"
 skip_dbs="$(printf "|%s" "${skip_databases[@]}")"
-mapfile -t all_databases < <( list-databases "${connection[@]}" "--password=${password:-}" | grep -v -E "^(${skip_dbs})$" )
+mapfile -t all_databases < <( list-databases "${connection[@]}" "--password=${password:-}" | grep -v -E "^(local|${skip_dbs})$" )
 
 # if db set on command line, otherwise dump all databases (except skipped)
 if [[ "${#args[@]}" -gt 0 ]]; then
