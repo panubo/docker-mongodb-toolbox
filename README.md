@@ -41,4 +41,4 @@ documentation for the subcommand for more information.
 
 ## Status
 
-In development.
+Works, however some features are incomplete.
