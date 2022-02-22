@@ -200,9 +200,18 @@ file_ext+=( ".bson" )
 get_compression_commands "${compression:-gzip}"
 
 # Create a temporary save path
-# mkdir uses TMPDIR, if unset set to /var/tmp since /tmp is normally in memory and could be too small for a big database
+# mktemp uses TMPDIR, if unset set to /var/tmp since /tmp is normally in memory and could be too small for a big database
 export TMPDIR="${TMPDIR:-/var/tmp}"
-save_path="$(mktemp -d)/"
+rm -rf "${TMPDIR}"/db-backup-*
+save_path="$(mktemp -d db-backup-XXXXXXXXXX)/"
+
+function finish {
+  if [[ "${storage_type}" != "file" ]]; then
+    # Clean up the save path if successful and not a file storage_type
+    rm -rf "${save_path}"
+  fi
+}
+trap finish EXIT
 
 # Setup the final path to pass to the save cmd
 full_path="$(printf "%s/" "${file_path[@]}")"
@@ -252,8 +261,6 @@ if [[ "${storage_type}" == "file" ]]; then
 else
     echo ">> Uploading to ${full_path}"
     eval "${save_cmd[@]}" "${save_path}" "${full_path}"
-    # Clean up the save path if successful and not a file storage_type
-    rm -rf "${save_path}"
 fi
 
 echo "> Finished."
