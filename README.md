@@ -14,13 +14,13 @@ Documentation for each subcommand:
 Using Docker links to `mongodb` container:
 
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.5
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.6
 ```
 
 This will display the usage information.
 
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.5 <subcommand>
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.6 <subcommand>
 ```
 
 To run the subcommand.
