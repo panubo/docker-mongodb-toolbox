@@ -203,7 +203,7 @@ get_compression_commands "${compression:-gzip}"
 # mktemp uses TMPDIR, if unset set to /var/tmp since /tmp is normally in memory and could be too small for a big database
 export TMPDIR="${TMPDIR:-/var/tmp}"
 rm -rf "${TMPDIR}"/db-backup-*
-save_path="$(mktemp -d db-backup-XXXXXXXXXX)/"
+save_path="$(mktemp -d --tmpdir db-backup-XXXXXXXXXX)/"
 
 function finish {
   if [[ "${storage_type}" != "file" ]]; then
