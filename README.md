@@ -12,17 +12,14 @@ Documentation for each subcommand:
 ## General Usage
 
 Using Docker links to `mongodb` container:
-
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.6
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7
 ```
-
 This will display the usage information.
 
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.6 <subcommand>
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7 <subcommand>
 ```
-
 To run the subcommand.
 
 ## Configuration
@@ -38,6 +35,18 @@ Or alternatively specify the variables:
 
 Some subcommands require additional environment parameters or positional arguments. See the
 documentation for the subcommand for more information.
+
+## Testing
+
+The [Makefile](Makefile) initiates a test designed to be run in a CI/CD. It starts up a [Docker-in-Docker](https://github.com/jpetazzo/dind) container and runs the tests within a temporary container which is set up and torn down upon every invocation to ensure a clean environment.
+```console
+make test
+```
+
+If you are developing locally and wish to run the tests outside the Docker-in-Docker container in order to gain a better visibility into the process, you can run the following command from the repository root:
+```console
+./test/runner.sh
+```
 
 ## Status
 
