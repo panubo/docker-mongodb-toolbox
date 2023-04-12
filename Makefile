@@ -13,6 +13,9 @@ build: ## Builds docker image
 test: ## Run tests
 	./tests/dind-runner.sh
 
+_ci_test:
+	true
+
 clean: ## Remove built image
 	docker rmi $(IMAGE_NAME):$(TAG)
 
