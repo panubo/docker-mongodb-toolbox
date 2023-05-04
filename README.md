@@ -13,12 +13,12 @@ Documentation for each subcommand:
 
 Using Docker links to `mongodb` container:
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7-1
 ```
 This will display the usage information.
 
 ```console
-docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7 <subcommand>
+docker run --rm -i -t --link myserver:mongodb docker.io/panubo/mongodb-toolbox:0.0.7-1 <subcommand>
 ```
 To run the subcommand.
 
@@ -28,10 +28,12 @@ Use `--link <mongodb container name>:mongodb` to automatically specify the requi
 
 Or alternatively specify the variables:
 
-- `DATABASE_HOST` = IP / hostname of MongoDB server.
-- `DATABASE_PORT` = TCP Port of MongoDB service.
-- `DATABASE_USER` = Administrative user
-- `DATABASE_PASS` = Password of administrative user.
+| Name | Description |
+| --- | --- |
+| `DATABASE_HOST` | IP / hostname of MongoDB server. |
+| `DATABASE_PORT` | TCP Port of MongoDB service. |
+| `DATABASE_USER` | Administrative user |
+| `DATABASE_PASS` | Password of administrative user. |
 
 Some subcommands require additional environment parameters or positional arguments. See the
 documentation for the subcommand for more information.
