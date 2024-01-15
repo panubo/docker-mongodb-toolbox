@@ -6,7 +6,7 @@ ENV \
   PAGER=more
 
 RUN set -x \
-  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 py3-pip rsync curl ca-certificates aws-cli py3-mongo-pyc \
+  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 py3-pip rsync curl ca-certificates aws-cli py3-mongo \
   && rm -rf /var/cache/apk/* \
   ;
 
