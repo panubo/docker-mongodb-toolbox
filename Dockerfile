@@ -1,15 +1,19 @@
-FROM alpine:3.14
+FROM alpine:3.19
+
+ENV \
+  PYTHONIOENCODING=UTF-8 \
+  PYTHONUNBUFFERED=0 \
+  PAGER=more
 
 RUN set -x \
-  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 py3-pip rsync curl \
-  && ln -s /usr/bin/python3 /usr/bin/python \
+  && apk add --update bash findutils mongodb-tools gzip bzip2 lz4 xz unzip zip coreutils python3 py3-pip rsync curl ca-certificates aws-cli py3-mongo-pyc \
   && rm -rf /var/cache/apk/* \
   ;
 
 # Install Gcloud SDK (required for gsutil workload identity authentication)
 ENV \
-  GCLOUD_VERSION=331.0.0 \
-  GCLOUD_CHECKSUM=f90c2df5bd0b3498d7e33112f17439eead8c94ae7d60a1cab0091de0eee62c16
+  GCLOUD_VERSION=459.0.0 \
+  GCLOUD_CHECKSUM=c7c02262cded63dc2f017aecfe71532da3712ab1b0a8f8d217dc42bcba259de8
 
 RUN set -x \
   && apk --no-cache add python3 \
@@ -23,29 +27,8 @@ RUN set -x \
   && rm -rf /tmp/* /root/.config/gcloud \
   ;
 
-# Install AWS CLI
-ENV \
-  PYTHONIOENCODING=UTF-8 \
-  PYTHONUNBUFFERED=0 \
-  PAGER=more \
-  AWS_CLI_VERSION=1.18.93 \
-  AWS_CLI_CHECKSUM=37eaa4d25cb1b9786af4ab6858cce7dfca154d264554934690d99994a7bbd7a5
-
-RUN set -x \
-  && apk add --no-cache ca-certificates wget \
-  && cd /tmp \
-  && wget -nv https://s3.amazonaws.com/aws-cli/awscli-bundle-${AWS_CLI_VERSION}.zip -O /tmp/awscli-bundle-${AWS_CLI_VERSION}.zip \
-  && echo "${AWS_CLI_CHECKSUM}  awscli-bundle-${AWS_CLI_VERSION}.zip" > /tmp/SHA256SUM \
-  && sha256sum -c SHA256SUM \
-  && unzip awscli-bundle-${AWS_CLI_VERSION}.zip \
-  && /tmp/awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws \
-  && apk del wget \
-  && rm -rf /tmp/* \
-  ;
-
 # for list-databases
 ENV PATH=${PATH}:/commands
-RUN pip install pymongo;
 
 COPY commands /commands
 
