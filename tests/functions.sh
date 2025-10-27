@@ -8,6 +8,19 @@ CWD="$(dirname $0)/"
 
 . ${CWD}config.sh
 
+# Set docker platform
+case $(uname -m) in
+    x86_64)
+        PLATFORM="linux/amd64"
+        ;;
+    aarch64|arm64)
+        PLATFORM="linux/arm64/v8"
+        ;;
+    *)
+        PLATFORM="linux/$(uname -m)"
+        ;;
+esac
+
 function rm_container {
     set +e
     docker rm -fv "$@" > /dev/null 2>&1
@@ -50,10 +63,12 @@ function wait_on_port {
 
 function start_docker {
     echo "=> Starting docker"
-    if ! docker version > /dev/null 2>&1; then
-        wrapdocker > /dev/null 2>&1 &
-        sleep 5
-    fi
+    dockerd-entrypoint.sh dockerd > /dev/null 2>&1 &
+    while (! docker stats --no-stream &> /dev/null); do
+        echo "Waiting for Docker daemon..."
+        sleep 1
+    done
+    echo "Docker daemon is ready."
 }
 
 function check_docker {
@@ -62,9 +77,8 @@ function check_docker {
 }
 
 function check_environment {
-    echo "=> Testing environment"
-    docker version > /dev/null 
-    which curl > /dev/null
+    echo "=> Checking environment"
+    docker version > /dev/null || { echo "docker bad"; exit 1; }
 }
 
 function build_image {
